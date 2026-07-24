@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Radar de Ofertas — monitore quantos anúncios cada oferta roda na Biblioteca de Anúncios e acompanhe a tendência dia a dia.">
+<meta name="theme-color" content="#08080B">
+<title>Radar de Ofertas</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ======================= NAV ======================= -->
+<div class="nav-wrap">
+  <nav class="nav">
+    <div class="brand">
+      <span class="radar" aria-hidden="true"><span class="sweep"></span><span class="blip"></span></span>
+      <span class="wordmark">RADAR <b>DE OFERTAS</b></span>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-ghost" id="btnExemplo" type="button" title="Ações de dados" aria-haspopup="true">
+        <span class="ic" data-ic="dots"></span>
+      </button>
+      <div class="menu" id="dataMenu" role="menu" hidden>
+        <button class="menu-item" data-menu="log-hoje" role="menuitem"><span class="ic" data-ic="pulse"></span> Registro de hoje</button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" data-menu="export" role="menuitem"><span class="ic" data-ic="down"></span> Exportar backup (JSON)</button>
+        <button class="menu-item" data-menu="import" role="menuitem"><span class="ic" data-ic="up"></span> Importar backup</button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" data-menu="exemplo" role="menuitem"><span class="ic" data-ic="beaker"></span> Carregar dados de exemplo</button>
+        <button class="menu-item menu-item-danger" data-menu="limpar" role="menuitem"><span class="ic" data-ic="trash"></span> Limpar tudo</button>
+      </div>
+      <button class="btn btn-secondary" id="btnLogHoje" type="button">
+        <span class="ic" data-ic="pulse"></span> Registro de hoje
+      </button>
+      <button class="btn btn-primary" id="btnNova" type="button">
+        <span class="ic" data-ic="plus"></span> Nova oferta
+      </button>
+    </div>
+  </nav>
+</div>
+
+<main class="page">
+
+  <!-- banner de dados de exemplo -->
+  <div class="seed-banner" id="seedBanner" hidden>
+    <span class="ic" data-ic="beaker"></span>
+    <span>Você está vendo <b>dados de exemplo</b> para conhecer a ferramenta.</span>
+    <button class="btn btn-tiny" id="btnLimparExemplo" type="button">Limpar e começar do zero</button>
+  </div>
+
+  <!-- ======================= KPIs ======================= -->
+  <section class="kpis" id="kpis" aria-label="Resumo"></section>
+
+  <!-- destaque -->
+  <div class="highlight-row" id="highlight" hidden></div>
+
+  <!-- ======================= CONTROLES ======================= -->
+  <section class="controls">
+    <label class="search-box">
+      <span class="ic" data-ic="search"></span>
+      <input type="search" id="search" placeholder="Buscar oferta, anunciante ou nicho…" autocomplete="off">
+    </label>
+    <div class="control-group">
+      <div class="select-wrap">
+        <select id="filterNicho" aria-label="Filtrar por nicho"><option value="">Todos os nichos</option></select>
+        <span class="ic" data-ic="chevron"></span>
+      </div>
+      <div class="select-wrap">
+        <select id="filterStatus" aria-label="Filtrar por status">
+          <option value="">Todos os status</option>
+          <option value="Monitorando">Monitorando</option>
+          <option value="Escalando">Escalando</option>
+          <option value="Instável">Instável</option>
+          <option value="Caindo">Caindo</option>
+          <option value="Morta">Morta</option>
+        </select>
+        <span class="ic" data-ic="chevron"></span>
+      </div>
+      <div class="select-wrap">
+        <select id="sort" aria-label="Ordenar">
+          <option value="momentum">Maior momentum</option>
+          <option value="count">Mais anúncios</option>
+          <option value="recent">Atualizado recentemente</option>
+          <option value="name">Nome (A–Z)</option>
+          <option value="days">Dias monitorando</option>
+        </select>
+        <span class="ic" data-ic="chevron"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= GRID ======================= -->
+  <section class="grid" id="grid" aria-live="polite"></section>
+
+</main>
+
+<!-- raiz de modais -->
+<div class="modal-root" id="modalRoot" aria-hidden="true"></div>
+
+<!-- input escondido p/ importar -->
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<!-- toast -->
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
