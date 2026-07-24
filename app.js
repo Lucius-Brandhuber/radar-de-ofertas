@@ -1,7 +1,8 @@
 /* ===========================================================
    RADAR DE OFERTAS — app.js
-   Vanilla JS, sem dependências. Persistência em localStorage,
-   isolada no objeto Store (troca p/ Supabase depois sem reescrever).
+   Vanilla JS, sem dependências. Cache em localStorage + sincronização
+   opcional na nuvem via Google Apps Script (ver bloco "Sincronização").
+   Backend novo? Basta reimplementar saveLocal/loadLocal/persist/pull/push.
    =========================================================== */
 'use strict';
 
@@ -12,6 +13,7 @@ const STATUSES = ['Monitorando', 'Escalando', 'Instável', 'Caindo', 'Morta'];
 const state = {
   offers: [],
   seeded: false,
+  updatedAt: 0,
   filters: { search: '', nicho: '', status: '', sort: 'momentum' },
 };
 
@@ -69,13 +71,121 @@ function svgWrap(inner) { return `<svg viewBox="0 0 24 24" fill="none" stroke="c
 function ic(name) { return `<span class="ic" data-ic="${name}">${svgWrap(ICONS[name] || '')}</span>`; }
 function injectIcons(root = document) { $$('[data-ic]', root).forEach((el) => { if (!el.firstChild) el.innerHTML = svgWrap(ICONS[el.getAttribute('data-ic')] || ''); }); }
 
-/* ---------- Store (localStorage) ---------- */
-const Store = {
-  load() { try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } },
-  save() { try { localStorage.setItem(KEY, JSON.stringify({ v: 1, seeded: state.seeded, offers: state.offers })); } catch (e) { toast('Não consegui salvar (armazenamento cheio?)', 'bad'); } },
-};
-function persist() { Store.save(); }
+/* ---------- Sincronização (localStorage + Google Apps Script) ----------
+   O localStorage é o cache instantâneo/offline; a nuvem (Apps Script) é a
+   fonte da verdade compartilhada entre dispositivos. Toda leitura/escrita
+   passa por aqui — para trocar de backend, basta reimplementar este bloco. */
+const SYNC_URL = 'https://script.google.com/macros/s/AKfycbyX-Z7vD4ZgGWXRqGq8S1yX7Ri-2VRzc_vwViz6qfKwk2nuy9eLp1Qa8LXJg2-WdPdR/exec';
+const SYNC_TOKEN = 'radar-c0ffee-42'; // deve bater com TOKEN no backend.gs
+
+let _pushTimer = null, _lastSyncedAt = 0, _pulling = false, _firstPull = false;
+const Sync = { status: 'off' };
+
+function saveLocal() {
+  try { localStorage.setItem(KEY, JSON.stringify({ v: 1, seeded: state.seeded, offers: state.offers, updatedAt: state.updatedAt })); }
+  catch (e) { toast('Não consegui salvar localmente (armazenamento cheio?)', 'bad'); }
+}
+function loadLocal() {
+  let d = null; try { d = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+  // Com a nuvem ligada, um cache que é só o exemplo (seeded) é ignorado — a
+  // nuvem manda. Assim não "pisca" exemplo→vazio ao abrir num cliente novo.
+  if (d && Array.isArray(d.offers) && !(SYNC_URL && d.seeded)) {
+    state.offers = d.offers; state.seeded = !!d.seeded; state.updatedAt = d.updatedAt || 0;
+  } else if (SYNC_URL) {
+    state.offers = []; state.seeded = false; state.updatedAt = 0; // espera o pull da nuvem
+  } else {
+    state.offers = exampleOffers(); state.seeded = true; state.updatedAt = 0; saveLocal();
+  }
+}
+function persist() { state.updatedAt = Date.now(); saveLocal(); schedulePush(); }
 function touched() { if (state.seeded) { state.seeded = false; syncSeedBanner(); } }
+
+function payload_() { return { token: SYNC_TOKEN, data: { offers: state.offers, updatedAt: state.updatedAt, seeded: state.seeded } }; }
+function setSync(status) { Sync.status = status; renderSyncBadge(); }
+
+function schedulePush() { if (!SYNC_URL) return; clearTimeout(_pushTimer); _pushTimer = setTimeout(pushRemote, 900); }
+
+async function pushRemote() {
+  if (!SYNC_URL) { setSync('off'); return; }
+  if (state.seeded) { setSync('idle'); return; }        // não sobe dados de exemplo
+  const stamp = state.updatedAt;
+  setSync('saving');
+  try {
+    // sem headers custom → Content-Type text/plain → sem preflight CORS
+    const res = await fetch(SYNC_URL, { method: 'POST', redirect: 'follow', body: JSON.stringify(payload_()) });
+    let ok = false;
+    try { const j = await res.json(); ok = !!(j && j.ok); } catch (e) { ok = false; }
+    // O Apps Script redireciona a resposta do POST e às vezes ela não vem
+    // legível — nesse caso, confirma por leitura que o dado realmente subiu.
+    if (!ok) ok = await verifyPushed_(stamp);
+    if (!ok) throw new Error('não confirmado');
+    _lastSyncedAt = Math.max(_lastSyncedAt, stamp);
+    if (state.updatedAt > _lastSyncedAt) schedulePush();   // mudou de novo durante o push
+    else setSync('synced');
+  } catch (e) {
+    setSync('offline');
+    setTimeout(() => { if (state.updatedAt > _lastSyncedAt) pushRemote(); }, 12000);
+  }
+}
+async function verifyPushed_(stamp) {
+  try {
+    const res = await fetch(`${SYNC_URL}?token=${encodeURIComponent(SYNC_TOKEN)}&t=${Date.now()}`, { redirect: 'follow' });
+    const j = await res.json();
+    return !!(j && j.ok && j.data && (j.data.updatedAt || 0) >= stamp);
+  } catch (e) { return false; }
+}
+
+async function pullRemote() {
+  if (!SYNC_URL || _pulling) return;
+  _pulling = true;
+  try {
+    const res = await fetch(`${SYNC_URL}?token=${encodeURIComponent(SYNC_TOKEN)}&t=${Date.now()}`, { redirect: 'follow' });
+    const j = await res.json();
+    if (j && j.ok && j.data) {
+      const rem = j.data, remAt = rem.updatedAt || 0;
+      if (remAt > (state.updatedAt || 0) && !modalRoot.classList.contains('open')) {
+        state.offers = rem.offers || [];
+        state.seeded = state.offers.length ? false : !!rem.seeded;
+        state.updatedAt = remAt; _lastSyncedAt = remAt;
+        saveLocal(); syncSeedBanner(); renderAll();
+        setSync('synced');
+      } else if (!state.seeded && state.updatedAt > _lastSyncedAt) {
+        pushRemote();
+      } else {
+        setSync(state.seeded ? 'idle' : 'synced');
+      }
+    }
+  } catch (e) { setSync('offline'); }
+  finally { _pulling = false; }
+}
+
+function flushRemote() {
+  if (!SYNC_URL || state.seeded || state.updatedAt <= _lastSyncedAt) return;
+  try {
+    navigator.sendBeacon(SYNC_URL, new Blob([JSON.stringify(payload_())], { type: 'text/plain' }));
+    _lastSyncedAt = state.updatedAt;
+  } catch (e) {}
+}
+
+function renderSyncBadge() {
+  const el = $('#syncBadge'); if (!el) return;
+  const map = {
+    off:     ['', 'Local'],
+    idle:    ['', 'Nuvem conectada'],
+    saving:  ['warn', 'Salvando…'],
+    synced:  ['good', 'Salvo na nuvem'],
+    offline: ['bad', 'Offline — salvo aqui'],
+  };
+  const [cls, label] = map[Sync.status] || map.off;
+  el.className = 'sync ' + cls;
+  el.innerHTML = `<span class="sync-dot"></span><span class="sync-l">${label}</span>`;
+  el.title = SYNC_URL ? label : 'Sincronização não configurada — os dados ficam só neste navegador';
+}
+function forceSync() {
+  if (!SYNC_URL) { toast('Sincronização com a nuvem ainda não está configurada'); return; }
+  toast('Sincronizando…');
+  pullRemote(); if (state.updatedAt > _lastSyncedAt) pushRemote();
+}
 
 /* ---------- análise ---------- */
 function snapsOf(o) { return (o.snaps || []).slice().sort((a, b) => a.data.localeCompare(b.data)); }
@@ -258,6 +368,10 @@ function cardHTML(o) {
 
 function renderGrid() {
   const grid = $('#grid');
+  if (state.offers.length === 0 && _firstPull) {
+    grid.innerHTML = `<div class="empty">${ic('radar')}<h3>Carregando da nuvem…</h3><p>Buscando seus dados sincronizados.</p></div>`;
+    return;
+  }
   if (state.offers.length === 0) {
     grid.innerHTML = `<div class="empty">${ic('radar')}<h3>Nenhuma oferta no radar</h3><p>Cadastre a primeira oferta que você quer monitorar na Biblioteca de Anúncios — depois é só registrar a contagem a cada dia e acompanhar a tendência.</p><div class="empty-actions"><button class="btn btn-primary" data-menu="nova">${ic('plus')} Nova oferta</button><button class="btn btn-secondary" data-menu="exemplo">${ic('beaker')} Ver com dados de exemplo</button></div></div>`;
     return;
@@ -542,6 +656,7 @@ function handleMenuAction(action) {
 function wireGlobal() {
   $('#btnNova').addEventListener('click', () => openOfferForm());
   $('#btnLogHoje').addEventListener('click', () => openDailyLog());
+  { const sb = $('#syncBadge'); if (sb) sb.addEventListener('click', forceSync); }
   $('#btnExemplo').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
   $('#btnLimparExemplo').addEventListener('click', () => confirmDialog({ title: 'Começar do zero?', confirmLabel: 'Limpar exemplo', msg: 'Remove os dados de exemplo para você cadastrar suas próprias ofertas.', onConfirm: () => { closeModal(); clearAll(); } }));
 
@@ -569,13 +684,26 @@ function wireGlobal() {
 }
 
 /* ---------- init ---------- */
-function init() {
+async function init() {
   injectIcons(document);
-  const stored = Store.load();
-  if (stored && Array.isArray(stored.offers)) { state.offers = stored.offers; state.seeded = !!stored.seeded; }
-  else { state.offers = exampleOffers(); state.seeded = true; persist(); }
-  syncSeedBanner();
+  _firstPull = !!SYNC_URL;
+  loadLocal();          // pinta na hora a partir do cache local (ou "carregando")
   wireGlobal();
+  syncSeedBanner();
+  renderSyncBadge();
   renderAll();
+  if (SYNC_URL) {
+    setSync('saving');
+    await pullRemote();  // nuvem é a fonte da verdade
+    _firstPull = false;
+    renderAll();
+    if (!state.seeded && state.updatedAt > _lastSyncedAt) pushRemote();
+    setInterval(pullRemote, 45000);
+    window.addEventListener('focus', pullRemote);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushRemote(); });
+    window.addEventListener('beforeunload', flushRemote);
+  } else {
+    setSync('off');
+  }
 }
 init();
