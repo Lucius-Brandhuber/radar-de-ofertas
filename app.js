@@ -356,7 +356,10 @@ function cardHTML(o) {
   else if (snaps.length === 1) chip = `<span class="chip new">${ic('pulse')} 1º registro</span>`;
   const count = l ? `<span class="count num">${fmt(l.contagem)}</span><span class="count-unit">anúncios</span>` : `<span class="count-none">sem registros</span>`;
   const footLeft = l ? `<span class="${daysAgo(l.data) > 2 ? 'stale' : ''}">${dm} ${dm === 1 ? 'dia' : 'dias'} · ${humanAgo(l.data)}</span>` : `<span class="stale">aguardando 1º registro</span>`;
-  const footRight = o.url ? `<a class="lib-link" href="${esc(o.url)}" target="_blank" rel="noopener">${ic('external')} Biblioteca</a>` : '';
+  const links = [];
+  if (o.pv) links.push(`<a class="lib-link" href="${esc(o.pv)}" target="_blank" rel="noopener">${ic('external')} PV</a>`);
+  if (o.url) links.push(`<a class="lib-link" href="${esc(o.url)}" target="_blank" rel="noopener">${ic('external')} Biblioteca</a>`);
+  const footRight = links.length ? `<span class="foot-links">${links.join('')}</span>` : '';
   return `<article class="card" data-id="${o.id}" data-action="detail" tabindex="0" role="button" aria-label="${esc(o.nome)}">
     <div class="card-top">${o.nicho ? `<span class="tag">${esc(o.nicho)}</span>` : '<span></span>'}<span class="pill s-${esc(o.status)}">${esc(o.status)}</span></div>
     <div><div class="card-name">${esc(o.nome)}</div>${o.anunciante ? `<div class="card-adv">${ic('building')} ${esc(o.anunciante)}</div>` : ''}</div>
@@ -416,6 +419,7 @@ function openOfferForm(id) {
         <div class="field"><label>Anunciante / Página</label><input class="input" name="anunciante" autocomplete="off" value="${esc(o && o.anunciante)}" placeholder="Vida Leve Oficial"></div>
       </div>
       <div class="field"><label>Link da busca na Biblioteca de Anúncios</label><input class="input" name="url" type="url" autocomplete="off" value="${esc(o && o.url)}" placeholder="https://www.facebook.com/ads/library/?q=..."><div class="hint">Faça a busca na Biblioteca, copie a URL e cole aqui. O card vira atalho de 1 clique para reconferir a contagem.</div></div>
+      <div class="field"><label>Página de vendas (PV)</label><input class="input" name="pv" type="url" autocomplete="off" value="${esc(o && o.pv)}" placeholder="https://..."><div class="hint">A página/checkout para onde os anúncios levam. Vira um atalho no card, pra você reabrir e estudar a oferta.</div></div>
       <div class="field-row">
         <div class="field" style="max-width:120px"><label>País</label><input class="input" name="pais" autocomplete="off" value="${esc((o && o.pais) || 'BR')}" placeholder="BR"></div>
         <div class="field"><label>Status</label><div class="select-field"><select class="select" name="status">${statusOpts}</select>${ic('chevron')}</div></div>
@@ -429,7 +433,7 @@ function openOfferForm(id) {
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const fd = new FormData(form);
-    const data = { nome: (fd.get('nome') || '').trim(), nicho: (fd.get('nicho') || '').trim(), anunciante: (fd.get('anunciante') || '').trim(), url: (fd.get('url') || '').trim(), pais: ((fd.get('pais') || 'BR').trim() || 'BR'), status: fd.get('status') || 'Monitorando', obs: (fd.get('obs') || '').trim() };
+    const data = { nome: (fd.get('nome') || '').trim(), nicho: (fd.get('nicho') || '').trim(), anunciante: (fd.get('anunciante') || '').trim(), url: (fd.get('url') || '').trim(), pv: (fd.get('pv') || '').trim(), pais: ((fd.get('pais') || 'BR').trim() || 'BR'), status: fd.get('status') || 'Monitorando', obs: (fd.get('obs') || '').trim() };
     if (!data.nome) { form.querySelector('[name=nome]').focus(); return; }
     if (isEdit) { Object.assign(o, data); touched(); persist(); toast('Oferta atualizada', 'good'); }
     else {
@@ -502,6 +506,7 @@ function openDetail(id) {
     o.anunciante ? `<span class="meta-chip">${ic('building')} ${esc(o.anunciante)}</span>` : '',
     o.pais ? `<span class="meta-chip">${ic('globe')} ${esc(o.pais)}</span>` : '',
     `<span class="meta-chip"><span class="pill s-${esc(o.status)}" style="padding:1px 8px">${esc(o.status)}</span></span>`,
+    o.pv ? `<span class="meta-chip">${ic('external')} <a href="${esc(o.pv)}" target="_blank" rel="noopener">Abrir PV</a></span>` : '',
     o.url ? `<span class="meta-chip">${ic('external')} <a href="${esc(o.url)}" target="_blank" rel="noopener">Abrir biblioteca</a></span>` : '',
   ].join('');
 
@@ -541,7 +546,7 @@ function openDetail(id) {
 
   const html = `<div class="modal-head"><div class="mh-text"><div class="modal-title">${esc(o.nome)}</div><div class="modal-sub">${st.n ? `monitorando há ${st.dias} ${st.dias === 1 ? 'dia' : 'dias'}` : 'nova oferta'}</div></div><button class="modal-close" data-close>${ic('close')}</button></div>
     <div class="modal-body">${body}</div>
-    <div class="modal-foot detail-foot"><div>${o.url ? `<a class="btn btn-secondary" href="${esc(o.url)}" target="_blank" rel="noopener">${ic('external')} Biblioteca</a>` : ''}</div><div style="display:flex;gap:10px"><button class="btn btn-secondary" data-edit-offer>${ic('edit')} Editar oferta</button><button class="btn btn-primary" data-close>Fechar</button></div></div>`;
+    <div class="modal-foot detail-foot"><div style="display:flex;gap:10px;flex-wrap:wrap">${o.pv ? `<a class="btn btn-secondary" href="${esc(o.pv)}" target="_blank" rel="noopener">${ic('external')} PV</a>` : ''}${o.url ? `<a class="btn btn-secondary" href="${esc(o.url)}" target="_blank" rel="noopener">${ic('external')} Biblioteca</a>` : ''}</div><div style="display:flex;gap:10px"><button class="btn btn-secondary" data-edit-offer>${ic('edit')} Editar oferta</button><button class="btn btn-primary" data-close>Fechar</button></div></div>`;
   const m = openModal(html, { wide: true });
 
   if (st.n) { const wrap = m.querySelector('.chart-wrap'); if (wrap) wireChart(wrap, geom); }
@@ -578,11 +583,11 @@ function makeSnaps(counts) { const n = counts.length; return counts.map((c, i) =
 function exampleOffers() {
   const lib = (q) => `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=BR&q=${encodeURIComponent(q)}&search_type=keyword_unordered`;
   return [
-    { id: uid(), nome: 'Chá Seca-Barriga 21 Dias', nicho: 'Emagrecimento', anunciante: 'Vida Leve Oficial', pais: 'BR', url: lib('chá seca barriga'), status: 'Escalando', obs: 'Ângulo do chá caseiro + VSL curta. Escalando forte esta semana.', criadoEm: addDaysISO(todayISO(), -9), snaps: makeSnaps([8, 12, 15, 14, 19, 24, 31, 38, 45, 52]) },
-    { id: uid(), nome: 'Reconquista em 7 Passos', nicho: 'Relacionamento', anunciante: 'Amor Verdadeiro', pais: 'BR', url: lib('como reconquistar ex'), status: 'Caindo', obs: 'Parou de escalar, criativos saturando.', criadoEm: addDaysISO(todayISO(), -7), snaps: makeSnaps([60, 55, 48, 41, 33, 25, 18, 11]) },
-    { id: uid(), nome: 'Método Renda Extra no PIX', nicho: 'Renda Extra', anunciante: 'Liberdade Financeira BR', pais: 'BR', url: lib('renda extra pix'), status: 'Instável', obs: 'Muito teste de criativo, oscila bastante dia a dia.', criadoEm: addDaysISO(todayISO(), -7), snaps: makeSnaps([10, 22, 14, 28, 18, 33, 20, 30]) },
-    { id: uid(), nome: 'Protocolo Testosterona Natural', nicho: 'Saúde Masculina', anunciante: 'Homem Alfa', pais: 'BR', url: lib('testosterona natural'), status: 'Monitorando', obs: 'Player consolidado, contagem estável.', criadoEm: addDaysISO(todayISO(), -7), snaps: makeSnaps([14, 15, 14, 16, 15, 14, 17, 16]) },
-    { id: uid(), nome: 'Manifestação em 5 Minutos', nicho: 'Espiritualidade', anunciante: 'Universo Conspira', pais: 'BR', url: lib('manifestação'), status: 'Escalando', obs: 'Oferta nova, começando a subir.', criadoEm: addDaysISO(todayISO(), -2), snaps: makeSnaps([5, 9, 16]) },
+    { id: uid(), nome: 'Chá Seca-Barriga 21 Dias', nicho: 'Emagrecimento', anunciante: 'Vida Leve Oficial', pais: 'BR', url: lib('chá seca barriga'), pv: 'https://vidaleveoficial.com.br/cha-seca-barriga', status: 'Escalando', obs: 'Ângulo do chá caseiro + VSL curta. Escalando forte esta semana.', criadoEm: addDaysISO(todayISO(), -9), snaps: makeSnaps([8, 12, 15, 14, 19, 24, 31, 38, 45, 52]) },
+    { id: uid(), nome: 'Reconquista em 7 Passos', nicho: 'Relacionamento', anunciante: 'Amor Verdadeiro', pais: 'BR', url: lib('como reconquistar ex'), pv: 'https://amorverdadeiro.com.br/reconquista-7-passos', status: 'Caindo', obs: 'Parou de escalar, criativos saturando.', criadoEm: addDaysISO(todayISO(), -7), snaps: makeSnaps([60, 55, 48, 41, 33, 25, 18, 11]) },
+    { id: uid(), nome: 'Método Renda Extra no PIX', nicho: 'Renda Extra', anunciante: 'Liberdade Financeira BR', pais: 'BR', url: lib('renda extra pix'), pv: 'https://liberdadefinanceirabr.com/pix', status: 'Instável', obs: 'Muito teste de criativo, oscila bastante dia a dia.', criadoEm: addDaysISO(todayISO(), -7), snaps: makeSnaps([10, 22, 14, 28, 18, 33, 20, 30]) },
+    { id: uid(), nome: 'Protocolo Testosterona Natural', nicho: 'Saúde Masculina', anunciante: 'Homem Alfa', pais: 'BR', url: lib('testosterona natural'), pv: 'https://homemalfa.com.br/testosterona-natural', status: 'Monitorando', obs: 'Player consolidado, contagem estável.', criadoEm: addDaysISO(todayISO(), -7), snaps: makeSnaps([14, 15, 14, 16, 15, 14, 17, 16]) },
+    { id: uid(), nome: 'Manifestação em 5 Minutos', nicho: 'Espiritualidade', anunciante: 'Universo Conspira', pais: 'BR', url: lib('manifestação'), pv: 'https://universoconspira.com.br/manifestacao-5min', status: 'Escalando', obs: 'Oferta nova, começando a subir.', criadoEm: addDaysISO(todayISO(), -2), snaps: makeSnaps([5, 9, 16]) },
   ];
 }
 function loadExample() { state.offers = exampleOffers(); state.seeded = true; persist(); syncSeedBanner(); renderAll(); toast('Dados de exemplo carregados', 'good'); }
@@ -606,7 +611,7 @@ function importJSON(file) {
       if (!Array.isArray(offers)) throw new Error('formato');
       const clean = offers.map((o) => ({
         id: o.id || uid(), nome: String(o.nome || 'Sem nome'), nicho: o.nicho || '', anunciante: o.anunciante || '', pais: o.pais || 'BR',
-        url: o.url || '', status: STATUSES.includes(o.status) ? o.status : 'Monitorando', obs: o.obs || '', criadoEm: o.criadoEm || todayISO(),
+        url: o.url || '', pv: o.pv || '', status: STATUSES.includes(o.status) ? o.status : 'Monitorando', obs: o.obs || '', criadoEm: o.criadoEm || todayISO(),
         snaps: Array.isArray(o.snaps) ? o.snaps.filter((s) => s && s.data && s.contagem != null).map((s) => ({ data: s.data, contagem: Number(s.contagem) || 0, nota: s.nota || '' })) : [],
       }));
       confirmDialog({

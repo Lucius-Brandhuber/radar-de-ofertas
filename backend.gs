@@ -27,7 +27,7 @@
 // igual à constante SYNC_TOKEN do app.js.
 var TOKEN = 'radar-c0ffee-42';
 
-var OFFER_COLS = ['id', 'nome', 'nicho', 'anunciante', 'pais', 'url', 'status', 'obs', 'criadoEm'];
+var OFFER_COLS = ['id', 'nome', 'nicho', 'anunciante', 'pais', 'url', 'pv', 'status', 'obs', 'criadoEm'];
 var SNAP_COLS  = ['offerId', 'data', 'contagem', 'nota'];
 
 /* ----------------- HTTP ----------------- */
@@ -71,7 +71,7 @@ function ss_() {
   var id = props.getProperty('SS_ID'), ss = null;
   if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
   if (!ss) { ss = SpreadsheetApp.create('Radar de Ofertas — Dados'); props.setProperty('SS_ID', ss.getId()); }
-  ensureSheet_(ss, 'offers', OFFER_COLS);
+  ensureSheet_(ss, 'offers', OFFER_COLS.concat(['json']));
   ensureSheet_(ss, 'snapshots', SNAP_COLS);
   ensureSheet_(ss, 'meta', ['key', 'value']);
   return ss;
@@ -84,7 +84,7 @@ function ensureSheet_(ss, name, header) {
 
 function readAll_() {
   var ss = ss_();
-  var offers = rows_(ss.getSheetByName('offers'), OFFER_COLS);
+  var offers = offerRows_(ss.getSheetByName('offers'));
   var snaps  = rows_(ss.getSheetByName('snapshots'), SNAP_COLS);
   var meta   = meta_(ss.getSheetByName('meta'));
   var byId = {};
@@ -93,19 +93,32 @@ function readAll_() {
     var o = byId[s.offerId];
     if (o) o.snaps.push({ data: String(s.data), contagem: Number(s.contagem) || 0, nota: s.nota || '' });
   });
-  return {
-    offers: offers.map(function (o) {
-      return { id: o.id, nome: o.nome, nicho: o.nicho, anunciante: o.anunciante, pais: o.pais, url: o.url, status: o.status, obs: o.obs, criadoEm: o.criadoEm, snaps: o.snaps };
-    }),
-    updatedAt: Number(meta.updatedAt) || 0,
-    seeded: meta.seeded === 'true',
-  };
+  return { offers: offers, updatedAt: Number(meta.updatedAt) || 0, seeded: meta.seeded === 'true' };
+}
+// A coluna "json" carrega a oferta completa (à prova de novos campos); as
+// outras colunas ficam só para leitura humana na planilha.
+function offerRows_(sh) {
+  var vals = sh.getDataRange().getValues();
+  if (vals.length < 2) return [];
+  var head = vals[0], idx = {}; head.forEach(function (h, i) { idx[h] = i; });
+  var out = [];
+  for (var r = 1; r < vals.length; r++) {
+    var row = vals[r];
+    if (String(row[idx['id']] || '') === '') continue;
+    var o = null;
+    if (idx['json'] != null && row[idx['json']]) { try { o = JSON.parse(row[idx['json']]); } catch (e) { o = null; } }
+    if (!o) { o = {}; OFFER_COLS.forEach(function (c) { o[c] = idx[c] != null ? row[idx[c]] : ''; }); }
+    delete o.snaps;
+    out.push(o);
+  }
+  return out;
 }
 function writeAll_(data) {
   var ss = ss_();
   var offers = data.offers || [];
-  grid_(ss.getSheetByName('offers'), OFFER_COLS, offers.map(function (o) {
-    return OFFER_COLS.map(function (c) { return o[c] != null ? o[c] : ''; });
+  grid_(ss.getSheetByName('offers'), OFFER_COLS.concat(['json']), offers.map(function (o) {
+    var noSnaps = {}; for (var k in o) { if (k !== 'snaps') noSnaps[k] = o[k]; }
+    return OFFER_COLS.map(function (c) { return o[c] != null ? o[c] : ''; }).concat([JSON.stringify(noSnaps)]);
   }));
   var snapRows = [];
   offers.forEach(function (o) {

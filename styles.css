@@ -266,7 +266,8 @@ body::before{
 
 .card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:11px;border-top:1px solid var(--hair);font-size:12px;color:var(--muted)}
 .card-foot .stale{color:var(--warn)}
-.lib-link{display:inline-flex;align-items:center;gap:5px;color:var(--text-2);font-weight:500;transition:color .18s}
+.foot-links{display:flex;gap:14px;align-items:center;min-width:0}
+.lib-link{display:inline-flex;align-items:center;gap:5px;color:var(--text-2);font-weight:500;transition:color .18s;white-space:nowrap}
 .lib-link:hover{color:var(--gold-bright)}
 .lib-link .ic{font-size:12px}
 
