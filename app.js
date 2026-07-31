@@ -669,7 +669,8 @@ function wireGlobal() {
   document.addEventListener('click', () => toggleMenu(false));
 
   // filtros
-  $('#search').addEventListener('input', (e) => { state.filters.search = e.target.value; renderGrid(); });
+  let _searchT;
+  $('#search').addEventListener('input', (e) => { state.filters.search = e.target.value; clearTimeout(_searchT); _searchT = setTimeout(renderGrid, 120); });
   $('#filterNicho').addEventListener('change', (e) => { state.filters.nicho = e.target.value; renderGrid(); });
   $('#filterStatus').addEventListener('change', (e) => { state.filters.status = e.target.value; renderGrid(); });
   $('#sort').addEventListener('change', (e) => { state.filters.sort = e.target.value; renderGrid(); });
@@ -712,3 +713,8 @@ async function init() {
   }
 }
 init();
+
+/* PWA: service worker para carregamento instantâneo e uso offline */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
